@@ -53,7 +53,7 @@ python3 -m examples.math_tool.train_math_with_tool \
     algorithm.mask_truncated_samples=False \
     algorithm.clip_advantages=False \
     trainer.critic_warmup=0 \
-    trainer.logger=['console','wandb'] \
+    trainer.logger=['console','jsonlogger'] \
     trainer.project_name='rllm-agent' \
     trainer.experiment_name='4b-math-tool' \
     trainer.val_before_train=True \
