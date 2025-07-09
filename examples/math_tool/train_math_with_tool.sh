@@ -15,7 +15,7 @@ python3 -m examples.math_tool.train_math_with_tool \
     data.val_batch_size=500 \
     data.max_prompt_length=2048 \
     data.max_response_length=8192 \
-    actor_rollout_ref.model.path=Qwen/Qwen3-4B \
+    actor_rollout_ref.model.path=Qwen/Qwen3-1.7B \
     actor_rollout_ref.hybrid_engine=True \
     actor_rollout_ref.actor.optim.lr=1e-6 \
     actor_rollout_ref.model.use_remove_padding=True \
@@ -24,7 +24,7 @@ python3 -m examples.math_tool.train_math_with_tool \
     actor_rollout_ref.actor.use_dynamic_mini_batch=True \
     actor_rollout_ref.actor.ppo_num_mini_batches=1 \
     actor_rollout_ref.actor.use_dynamic_bsz=True \
-    actor_rollout_ref.actor.ppo_max_token_len_per_gpu=24000 \
+    actor_rollout_ref.actor.ppo_max_token_len_per_gpu=10240 \
     actor_rollout_ref.actor.use_kl_loss=False \
     actor_rollout_ref.actor.clip_ratio_high=0.28 \
     actor_rollout_ref.actor.kl_loss_coef=0.001 \
