@@ -51,7 +51,12 @@ class AgentTrainer:
     def train(self):
         if not ray.is_initialized():
             ray.init(
-                runtime_env={"env_vars": {"TOKENIZERS_PARALLELISM": "true", "NCCL_DEBUG": "WARN"}},
+                runtime_env={
+                    "env_vars": {
+                        "TOKENIZERS_PARALLELISM": "true", "NCCL_DEBUG": "WARN",
+                        "RAY_DEBUG": "legacy",
+                    }
+                },
                 num_cpus=None,
             )
 
