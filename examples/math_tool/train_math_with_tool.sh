@@ -11,7 +11,7 @@ RLLM_DIR=$(python3 -c "import rllm; import os; print(os.path.dirname(os.path.dir
 
 export experiment_name="math-tool"
 
-python3 -m examples.math_tool.train_math_with_tool \
+python3 -u -m examples.math_tool.train_math_with_tool \
     algorithm.adv_estimator=grpo \
     data.train_batch_size=32 \
     data.val_batch_size=500 \
