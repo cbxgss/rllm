@@ -9,6 +9,8 @@ export VLLM_ENGINE_ITERATION_TIMEOUT_S=100000000000
 # Find the directory where rllm package is located
 RLLM_DIR=$(python3 -c "import rllm; import os; print(os.path.dirname(os.path.dirname(rllm.__file__)))")
 
+export experiment_name="math-tool"
+
 python3 -m examples.math_tool.train_math_with_tool \
     algorithm.adv_estimator=grpo \
     data.train_batch_size=32 \
@@ -55,7 +57,7 @@ python3 -m examples.math_tool.train_math_with_tool \
     trainer.critic_warmup=0 \
     trainer.logger=['console','jsonlogger'] \
     trainer.project_name='rllm-agent' \
-    trainer.experiment_name='4b-math-tool' \
+    trainer.experiment_name=$experiment_name \
     trainer.val_before_train=True \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=1 \
@@ -66,4 +68,4 @@ python3 -m examples.math_tool.train_math_with_tool \
     agent.async_engine=True \
     agent.use_stepwise_advantage=False \
     agent.stepwise_advantage_mode="mc_return" \
-    trainer.total_epochs=100
+    trainer.total_epochs=100 2>&1 | tee tmp/logs/$experiment_name/log.log
