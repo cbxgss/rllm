@@ -15,7 +15,7 @@ python3 -u -m examples.math_tool.train_math_with_tool \
     algorithm.adv_estimator=grpo \
     data.train_batch_size=32 \
     data.val_batch_size=500 \
-    data.max_prompt_length=2048 \
+    data.max_prompt_length=8192 \
     data.max_response_length=8192 \
     actor_rollout_ref.model.path=Qwen/Qwen3-1.7B \
     actor_rollout_ref.hybrid_engine=True \

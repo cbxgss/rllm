@@ -32,7 +32,7 @@ def load_search_data(train_size=3000, test_size=100):
 if __name__ == "__main__":
     os.environ["TOKENIZERS_PARALLELISM"] = "true"
     if "RETRIEVAL_SERVER_URL" not in os.environ:
-        os.environ["RETRIEVAL_SERVER_URL"] = "http://127.0.0.1:8000"
+        os.environ["RETRIEVAL_SERVER_URL"] = "http://127.0.0.1:8011"
 
     load_dotenv()
 
@@ -56,7 +56,7 @@ if __name__ == "__main__":
         tokenizer=tokenizer,
         sampling_params=sampling_params,
         rollout_engine_args={
-            "base_url": "http://localhost:30000/v1",
+            "base_url": "http://localhost:8013/v1",
             "api_key": "None",
         },
         max_response_length=16384,
