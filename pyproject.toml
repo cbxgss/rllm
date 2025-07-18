@@ -86,6 +86,7 @@ dependencies = [
     "mkdocstrings[python]>=0.24.0",
     "mkdocs-autorefs>=0.5.0",
     "pymdown-extensions>=10.0.0",
+    "ipdb",
 ]
 
 [tool.ruff]
