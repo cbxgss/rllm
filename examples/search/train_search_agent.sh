@@ -8,14 +8,16 @@ export VLLM_ENGINE_ITERATION_TIMEOUT_S=100000000000
 
 RLLM_DIR=$(python3 -c "import rllm; import os; print(os.path.dirname(os.path.dirname(rllm.__file__)))")
 
+export experiment_name="hotpotqa-search"
+
 # Run the training script with the specified configuration
 python3 -m examples.search.train_search_agent \
     algorithm.adv_estimator=loop \
     data.train_batch_size=64 \
     data.val_batch_size=128 \
-    data.max_prompt_length=2048 \
-    data.max_response_length=2048 \
-    actor_rollout_ref.model.path=Qwen/Qwen3-4B \
+    data.max_prompt_length=8192 \
+    data.max_response_length=8192 \
+    actor_rollout_ref.model.path=Qwen/Qwen3-1.7B \
     actor_rollout_ref.hybrid_engine=True \
     actor_rollout_ref.actor.optim.lr=1e-6 \
     actor_rollout_ref.model.use_remove_padding=True \
@@ -52,14 +54,14 @@ python3 -m examples.search.train_search_agent \
     algorithm.clip_advantages=False \
     trainer.critic_warmup=0 \
     trainer.logger=['console','wandb'] \
-    trainer.project_name='deepscaler-agent' \
-    trainer.experiment_name='7b-loop-drgrpo-search_agent' \
+    trainer.project_name='rllm-agent' \
+    trainer.experiment_name=${experiment_name} \
     trainer.val_before_train=False \
-    trainer.n_gpus_per_node=1\
+    trainer.n_gpus_per_node=8\
     trainer.nnodes=1 \
-    trainer.save_freq=40 \
+    trainer.save_freq=100 \
     trainer.test_freq=10 \
     trainer.default_hdfs_dir=null \
-    agent.max_steps=10 \
+    agent.max_steps=5 \
     agent.async_engine=True \
-    trainer.total_epochs=100 
+    trainer.total_epochs=100 2>&1 | tee tmp/logs/$experiment_name/log.log
