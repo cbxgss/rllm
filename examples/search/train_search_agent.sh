@@ -22,13 +22,16 @@ python3 -m examples.search.train_search_agent \
     actor_rollout_ref.model.use_remove_padding=True \
     actor_rollout_ref.actor.loss_agg_mode=seq-mean-token-sum \
     actor_rollout_ref.actor.ppo_mini_batch_size=32 \
-    actor_rollout_ref.actor.use_dynamic_bsz=True \
-    actor_rollout_ref.actor.ppo_max_token_len_per_gpu=24000 \
+    actor_rollout_ref.actor.use_dynamic_mini_batch=True \
+    actor_rollout_ref.actor.ppo_num_mini_batches=1 \
+     actor_rollout_ref.actor.use_dynamic_bsz=True \
+    actor_rollout_ref.actor.ppo_max_token_len_per_gpu=10240 \
     actor_rollout_ref.actor.use_kl_loss=False \
     actor_rollout_ref.actor.clip_ratio_high=0.28 \
     actor_rollout_ref.actor.kl_loss_coef=0.001 \
     actor_rollout_ref.actor.kl_loss_type=low_var_kl \
     actor_rollout_ref.actor.ulysses_sequence_parallel_size=1 \
+    actor_rollout_ref.actor.grad_norm_threshold=10 \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
     actor_rollout_ref.actor.fsdp_config.param_offload=True \
     actor_rollout_ref.actor.fsdp_config.optimizer_offload=True \
@@ -63,4 +66,6 @@ python3 -m examples.search.train_search_agent \
     trainer.default_hdfs_dir=null \
     agent.max_steps=5 \
     agent.async_engine=True \
+    agent.use_stepwise_advantage=False \
+    agent.stepwise_advantage_mode="mc_return" \
     trainer.total_epochs=100 2>&1 | tee tmp/logs/$experiment_name/log.log
