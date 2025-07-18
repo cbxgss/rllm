@@ -38,7 +38,7 @@ if __name__ == "__main__":
 
     n_parallel_agents = 64
 
-    model_name = "Qwen/Qwen3-4B"
+    model_name = "Qwen/Qwen3-1.7B"
 
     tokenizer = AutoTokenizer.from_pretrained(model_name)
 
