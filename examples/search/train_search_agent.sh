@@ -11,7 +11,7 @@ RLLM_DIR=$(python3 -c "import rllm; import os; print(os.path.dirname(os.path.dir
 export experiment_name="hotpotqa-search"
 mkdir -p tmp/logs/$experiment_name
 python3 -m examples.search.train_search_agent \
-    algorithm.adv_estimator=loop \
+    algorithm.adv_estimator=grpo \
     data.train_batch_size=64 \
     data.val_batch_size=128 \
     data.max_prompt_length=8192 \
