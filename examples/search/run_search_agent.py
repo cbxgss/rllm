@@ -25,8 +25,8 @@ def load_search_data(train_size=3000, test_size=100):
         from prepare_hotpotqa_data import prepare_hotpotqa_data
 
         _, test_dataset = prepare_hotpotqa_data(train_size=train_size, test_size=test_size)
-
-    return test_dataset.get_data()
+    import ipdb; ipdb.set_trace()
+    return test_dataset
 
 
 if __name__ == "__main__":
