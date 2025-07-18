@@ -1,3 +1,4 @@
+import os
 import hydra
 
 from rllm.agents.system_prompts import SEARCH_SYSTEM_PROMPT
@@ -14,7 +15,8 @@ from .local_retrieval_tool import LocalRetrievalTool
 def main(config):
     train_dataset = DatasetRegistry.load_dataset("hotpotqa", "train")
     val_dataset = DatasetRegistry.load_dataset("hotpotqa", "test")
-
+    if "RETRIEVAL_SERVER_URL" not in os.environ:
+        os.environ["RETRIEVAL_SERVER_URL"] = "http://127.0.0.1:8011"
     tool_map = {"local_search": LocalRetrievalTool}
 
     env_args = {
