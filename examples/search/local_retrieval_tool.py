@@ -122,8 +122,9 @@ class LocalRetrievalTool(Tool):
 
             # Prepare request payload
             payload = {
+                "source": "wiki",
                 "query": query,
-                "top_k": min(top_k, 50),  # Cap at 50 results
+                "topk": min(top_k, 50),  # Cap at 50 results
             }
 
             # Make request to retrieval server
