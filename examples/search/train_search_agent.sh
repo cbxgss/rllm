@@ -52,7 +52,7 @@ python3 -m examples.search.train_search_agent \
     algorithm.mask_truncated_samples=False \
     algorithm.clip_advantages=False \
     trainer.critic_warmup=0 \
-    trainer.logger=['console','wandb'] \
+    trainer.logger=['console','jsonlogger'] \
     trainer.project_name='rllm-agent' \
     trainer.experiment_name=${experiment_name} \
     trainer.val_before_train=False \
