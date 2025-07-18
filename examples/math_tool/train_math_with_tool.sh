@@ -1,5 +1,7 @@
 set -x
 
+export CUDA_LAUNCH_BLOCKING=1
+
 export VLLM_ATTENTION_BACKEND=FLASH_ATTN
 export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:False"
 export VLLM_USE_V1=1
