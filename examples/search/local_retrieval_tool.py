@@ -126,9 +126,10 @@ class LocalRetrievalTool(Tool):
                 "query": query,
                 "topk": min(top_k, 50),  # Cap at 50 results
             }
+            print(payload)
 
             # Make request to retrieval server
-            response = self.client.post(f"{self.server_url}/retrieve", json=payload)
+            response = self.client.post(f"{self.server_url}/retrieve", json=payload, headers={"Content-Type": "application/json"})
 
             if not response.is_success:
                 error_msg = f"Retrieval server error: {response.status_code}"
