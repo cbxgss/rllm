@@ -25,7 +25,7 @@ python3 -m examples.search.train_search_agent \
     actor_rollout_ref.actor.use_dynamic_mini_batch=True \
     actor_rollout_ref.actor.ppo_num_mini_batches=1 \
      actor_rollout_ref.actor.use_dynamic_bsz=True \
-    actor_rollout_ref.actor.ppo_max_token_len_per_gpu=10240 \
+    actor_rollout_ref.actor.ppo_max_token_len_per_gpu=16384 \
     actor_rollout_ref.actor.use_kl_loss=False \
     actor_rollout_ref.actor.clip_ratio_high=0.28 \
     actor_rollout_ref.actor.kl_loss_coef=0.001 \
