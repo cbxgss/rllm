@@ -9,8 +9,7 @@ export VLLM_ENGINE_ITERATION_TIMEOUT_S=100000000000
 RLLM_DIR=$(python3 -c "import rllm; import os; print(os.path.dirname(os.path.dirname(rllm.__file__)))")
 
 export experiment_name="hotpotqa-search"
-
-# Run the training script with the specified configuration
+mkdir -p tmp/logs/$experiment_name
 python3 -m examples.search.train_search_agent \
     algorithm.adv_estimator=loop \
     data.train_batch_size=64 \
