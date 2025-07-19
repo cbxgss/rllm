@@ -12,7 +12,7 @@ export experiment_name="hotpotqa-search"
 mkdir -p tmp/logs/$experiment_name
 python3 -m examples.search.train_search_agent \
     algorithm.adv_estimator=grpo \
-    data.train_batch_size=64 \
+    data.train_batch_size=32 \
     data.val_batch_size=128 \
     data.max_prompt_length=8192 \
     data.max_response_length=8192 \
@@ -20,7 +20,7 @@ python3 -m examples.search.train_search_agent \
     actor_rollout_ref.hybrid_engine=True \
     actor_rollout_ref.actor.optim.lr=1e-6 \
     actor_rollout_ref.model.use_remove_padding=True \
-    actor_rollout_ref.actor.loss_agg_mode=seq-mean-token-sum \
+    actor_rollout_ref.actor.loss_agg_mode=seq-mean-token-mean \
     actor_rollout_ref.actor.ppo_mini_batch_size=32 \
     actor_rollout_ref.actor.use_dynamic_mini_batch=True \
     actor_rollout_ref.actor.ppo_num_mini_batches=1 \
