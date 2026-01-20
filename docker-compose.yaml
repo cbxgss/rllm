@@ -1,0 +1,63 @@
+services:
+  rllm:
+    # 基础镜像：NVIDIA 官方 Ubuntu 24.04 + CUDA 12.8 运行时（含驱动依赖）
+    build:
+      context: .  # 构建上下文：当前目录（Dockerfile 所在目录）
+      dockerfile: Dockerfile  # 指定 Dockerfile 文件名
+      args:
+        HTTP_PROXY: "http://172.19.135.130:5000"
+        HTTPS_PROXY: "http://172.19.135.130:5000"
+        http_proxy: "http://172.19.135.130:5000"
+        https_proxy: "http://172.19.135.130:5000"
+        NO_PROXY: "127.0.0.1,localhost"
+        no_proxy: "127.0.0.1,localhost"
+    # 容器名称
+    container_name: rllm-ubuntu24-cuda128
+    # 特权模式（可选，用于设备访问和系统级操作）
+    privileged: true
+    # 交互式终端（模拟 SSH 登录体验）
+    tty: true
+    stdin_open: true
+    shm_size: "128g"  # 增加共享内存大小，适合大模型训练
+    # 持久化存储：将宿主机目录映射到容器（可自定义路径）
+    volumes:
+      - /home/cr/workspace:/root/workspace
+      - /home/cr/.cache:/root/.cache
+      - /home/cr/.local/share/uv:/root/.local/share/uv
+      - /home/cr/.tmux.conf:/root/.tmux.conf
+    working_dir: /root/workspace/dr/rllm
+    # 环境变量配置
+    environment:
+      # - HTTP_PROXY=http://172.19.135.130:5000
+      # - HTTPS_PROXY=http://172.19.135.130:5000
+      - HTTP_PROXY=127.0.0.1:7897
+      - HTTPS_PROXY=127.0.0.1:7897
+      - NO_PROXY=127.0.0.1,localhost
+      - HF_ENDPOINT=https://hf-mirror.com
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # 网络配置：使用主机网络（可选，适合需要端口映射或网络穿透的场景）
+    network_mode: "host"
+    # networks:
+    #   - rllm_network
+    # 启动命令：容器启动后执行的初始化脚本（安装常用工具）
+    # command: bash
+    # 资源限制（可选，根据宿主机配置调整）
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all  # 使用所有可用 GPU
+              capabilities: [gpu]
+
+# networks:
+#   rllm_network:
+#     driver: bridge
+#     ipam:
+#       config:
+#         - subnet: 172.18.1.0/24
+
+# docker compose up -d
+# docker compose down
+# docker compose exec -it rllm bash

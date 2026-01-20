@@ -1,26 +1,32 @@
-# Start from the verl base image
-# Dockerfile.base
-FROM verlai/verl:app-verl0.4-sglang0.4.6.post5-vllm0.8.5-mcore0.12.2-te2.2
+# 基础镜像：NVIDIA CUDA 12.8 + Ubuntu 24.04
+FROM nvidia/cuda:12.8.0-devel-ubuntu24.04
 
-WORKDIR /workspace
+# 设置环境变量
+ENV DEBIAN_FRONTEND=noninteractive
 
-# 1) Clone rllm repository with submodules
-RUN git clone --recurse-submodules https://github.com/rllm-org/rllm.git rllm
+# apt 代理
+RUN cat <<EOF >/etc/apt/apt.conf.d/99proxy
+Acquire::http::Proxy "http://172.19.135.130:5000";
+Acquire::https::Proxy "http://172.19.135.130:5000";
+EOF
 
-# 2) Install verl and rllm (editable)
-RUN cd rllm && \
-    pip install --no-deps -e ./verl && \
-    pip install -e .
+# 安装依赖：Python3、curl（用于安装 uv）、其他常用工具
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    python3-pip \
+    python3-dev \
+    curl \
+    git \
+    vim \
+    tmux \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
 
-# 3) Install playwright
-RUN pip install playwright && \
-    playwright install chromium && \
-    playwright install-deps
+# 安装 uv（官方推荐的一键安装脚本）
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
-CMD ["/bin/bash"]
+# 设置工作目录
+WORKDIR /root/workspace/dr/rllm
 
-# Docker Usage
-# docker build -t rllm .
-# docker create --runtime=nvidia --gpus all --net=host --shm-size="10g" --cap-add=SYS_ADMIN -v .:/workspace/rllm -v /tmp:/tmp --name rllm-container rllm sleep infinity
-# docker start rllm-container
-# docker exec -it rllm-container bash
+# 容器启动时默认进入 bash 终端
+CMD ["bash"]

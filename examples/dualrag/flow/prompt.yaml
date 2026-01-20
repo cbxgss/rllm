@@ -1,0 +1,154 @@
+DualRAG:
+  Reasoner: |
+    ## Background Information
+
+    Currently, there is a knowledge question-answering problem that needs to be solved, and retrieval tools can be used to find relevant knowledge to assist you in solving the problem.
+
+    For knowledge question-answering tasks, it is important to have a grasp of knowledge, which is organized by entities, with each entity having a segment of knowledge.
+
+    IMPORTANT:
+    - You must assume your internal knowledge is empty.
+    - The ONLY information you are allowed to use is explicitly provided in Knowledge.
+
+    ## Task Description
+
+    Your current task is to reason based on the knowledge that has been retrieved.
+
+    When reasoning, you must ONLY use the knowledge that has been retrieved. You are strictly forbidden from using any unstated facts, assumptions, or prior knowledge.
+
+    There are two conditions for concluding your reasoning:
+    - You have obtained the answer you were seeking, at which point you can conclude your reasoning.
+    - You find that the answer cannot be strictly derived from Knowledge. In this case, you MUST conclude that additional retrieval is required. Do NOT guess or answer partially.
+
+    ## Question currently being solved
+
+    ### Knowledge
+
+    {knowledge}
+
+    ### Current Knowledge Question
+
+    {question}
+
+    ### Reasoning History
+
+    {thoughts}
+
+    ## Output Format
+
+    Your output should be wrapped between ```json and ```, and the json format is as follows:
+
+    {json_format}
+
+  EntityIdentifier: |
+    ## Background
+
+    Currently, there is a knowledge question that needs to be solved, and a retrieval tool can be used to find relevant knowledge to assist you in resolving the issue.
+
+    For knowledge question tasks, it is important to have a grasp of the knowledge, which is organized by entities, each of which has a segment of knowledge.
+
+    ### Task Description
+
+    Your current task is to:
+
+    1. **Identify Key Entities**
+
+      - **Key entities** refer to entities that **still require additional knowledge retrieval** at the current reasoning stage.
+      - Entities are usually noun-like concepts, such as people, locations, organizations, events, or proper nouns.
+      - If you are continuing to query an entity that already exists in a **previous knowledge outline**, you should **reuse the same entity name** to maintain consistency (only the entity name must remain consistent; the queries do not).
+
+    2. **Generate Retrieval Queries for Each Key Entity**
+
+      - Queries are used to retrieve knowledge related to the entity.
+      - You may generate multiple queries for the same entity to cover different phrasings or sub-knowledge points.
+      - For queries with similar meanings, keep **at most two variations**.
+
+    ## Question currently being solved
+
+    ### Known Knowledge
+
+    The knowledge that has been retrieved is as follows:
+
+    {knowledge}
+
+    ### Question
+
+    The original question is as follows:
+
+    {question}
+
+    ### Reasoning History
+
+    Your previous reasoning history is as follows:
+
+    {thoughts}
+
+    ## Output Format
+
+    Your output should be wrapped between ```json and ```, and the json format is as follows:
+
+    {json_format}
+
+  KnowledgeSummarizer: |
+    ## Task Description
+
+    You are assisting in solving a QA problem, and you have gathered relevant information using retrieval tools.
+
+    Your task is to read the retrieved content and keep only the information that is relevant to the current question and the current reasoning process. Filter out everything else.
+
+    -  If there is no relevant information in the retrieved content, return None directly.
+    - Provide a concise organization or summary of the retained information, preserving the original wording as much as possible.
+    - Do not add inferences, explanations, or personal opinions.
+
+    ## Question currently being solved
+
+    ### Original Question
+
+    {question}
+
+    ### Reasoning History
+
+    {thoughts}
+
+    ### Retrieval
+
+    Key Entity to be retrieved: {entity}
+
+    Retrieve Queries: {queries}
+
+    Retrieved Content:
+
+    {docs}
+
+  Answer: |
+    ### Task Description
+
+    You are solving a knowledge-based question using retrieved information.
+
+    HINT: Generate the **final answer only**, transformed into a **standardized minimal form** suitable for **token-level exact matching**.
+    1. **Length requirement**:
+      - Prefer **1–3 tokens only**
+      - Never output full sentences
+    2. **Expected answer types (typical distribution)**
+      - Person name (e.g., *Richard Milhous Nixon*)
+      - Organization name (e.g., *Cartoonito*)
+      - Location (e.g., *Delhi*)
+      - Date / century (e.g., *13th century*)
+      - Number (e.g., *17*)
+      - Artwork title (e.g., *Die schweigsame Frau*)
+      - Yes / No
+      - Single adjective (e.g., *conservative*)
+      - Event or proper noun (e.g., *Cold War*)
+      - Common noun when required (e.g., *comedy*)
+
+    ### Retrieved Relevant Knowledge
+
+    {knowledge}
+
+    ### Question Being Addressed
+
+    {question}
+
+    ### Your Previous Reasoning
+
+    {thoughts}

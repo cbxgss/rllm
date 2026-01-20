@@ -1,4 +1,10 @@
 # Byte-compiled / optimized / DLL files
+examples/dualrag/server/web/firefox
+examples/dualrag/server/web/geckodriver
+
+.vscode
+uv.lock
+
 __pycache__/
 *.py[cod]
 *$py.class

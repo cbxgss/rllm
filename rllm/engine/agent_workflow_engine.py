@@ -102,7 +102,14 @@ class AgentWorkflowEngine:
         try:
             for retry_attempt in range(1, self.retry_limit + 1):
                 uid = f"{task_id}:{rollout_idx}"
-                episode = await workflow.run_with_termination_handling(task=task, uid=uid, **kwargs)
+                # 将 step 信息添加到 kwargs 中，以便 workflow 可以访问
+                kwargs_with_step = {
+                    **kwargs,
+                    "training_step": self.current_step,
+                    "training_epoch": self.current_epoch,
+                    "training_mode": self.current_mode,
+                }
+                episode = await workflow.run_with_termination_handling(task=task, uid=uid, **kwargs_with_step)
 
                 # Display rewards for all trajectories
                 rewards_str = ", ".join([f"{traj.name}: {traj.reward:.1f}" for traj in episode.trajectories])
