@@ -257,7 +257,7 @@ class DualRAGWorkflow(Workflow):
         training_step = kwargs.get("training_step", 0)
         training_epoch = kwargs.get("training_epoch", 0)
         training_mode = kwargs.get("training_mode", "train")
-        uid_dir = os.path.join(self.log_dir, f"epoch_{training_epoch}", f"step_{training_step}", f"{task['idx']}_{uid}")
+        uid_dir = os.path.join(self.log_dir, f"epoch_{training_epoch}", f"step_{training_step}", f"{uid}")
         if not os.path.exists(uid_dir):
             os.makedirs(uid_dir)
 
@@ -277,7 +277,6 @@ class DualRAGWorkflow(Workflow):
 
         metadata = {
             "uid": uid,
-            "idx": task["idx"],
             "data_source": task["data_source"],
             "question": question,
             "golden_answers": golden_answers,

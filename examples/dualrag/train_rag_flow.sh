@@ -4,6 +4,8 @@ export base_dir=$(pwd)
 
 export SWANLAB_API_KEY=ashYc7XpX4pwEzLFrftzx
 # export SWANLAB_API_HOST=https://api.bandw.top
+export WANDB_API_KEY=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
+export WANDB_BASE_URL=https://api.bandw.top
 
 export VLLM_ATTENTION_BACKEND=FLASH_ATTN
 export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:False"
@@ -19,6 +21,7 @@ max_response_length=$((1024 * 2))
 sp=1
 actor_ppo_max_token_len=$(((max_prompt_length + max_response_length) / sp))
 infer_ppo_max_token_len=$(((max_prompt_length + max_response_length) / sp))
+n=4
 
 export method=dualrag
 export retrieve_mode=local
@@ -28,7 +31,7 @@ experiment_name=${method}-${retrieve_mode}-${timestamp}
 
 python3 -m examples.dualrag.train_rag_flow \
     algorithm.adv_estimator=grpo \
-    data.train_batch_size=256 \
+    data.train_batch_size=128 \
     data.val_batch_size=1024 \
     data.max_prompt_length=${max_prompt_length} \
     data.max_response_length=${max_response_length} \
@@ -41,7 +44,7 @@ python3 -m examples.dualrag.train_rag_flow \
     actor_rollout_ref.rollout.enforce_eager=False \
     actor_rollout_ref.rollout.temperature=0.6 \
     actor_rollout_ref.rollout.gpu_memory_utilization=0.8 \
-    actor_rollout_ref.rollout.n=4 \
+    actor_rollout_ref.rollout.n=${n} \
     actor_rollout_ref.rollout.val_kwargs.n=1 \
     actor_rollout_ref.rollout.val_kwargs.temperature=0.6 \
     actor_rollout_ref.rollout.val_kwargs.top_p=0.95 \
@@ -70,7 +73,7 @@ python3 -m examples.dualrag.train_rag_flow \
     rllm.stepwise_advantage.enable=True \
     rllm.stepwise_advantage.mode=per_step \
     trainer.critic_warmup=0 \
-    trainer.logger=['console','swanlab'] \
+    trainer.logger=['console', 'wandb', 'swanlab'] \
     trainer.project_name='DualRAG' \
     trainer.experiment_name=${experiment_name} \
     trainer.val_before_train=True \
