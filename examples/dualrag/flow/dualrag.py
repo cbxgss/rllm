@@ -53,8 +53,8 @@ class State:
         ])
 
     def get_thoughts_str(self) -> str:
-        return "\n\n".join([
-            f"### Step {i+1}\n\n{thought}"
+        return "\n".join([
+            f"{i+1}. {thought}"
             for i, thought in enumerate(self.thoughts)
         ])
 
@@ -222,8 +222,10 @@ class DualRAG:
                         state.knowledge[entity] = []
                     state.knowledge[entity].append(summary)
                 log_all[f"turn_{i+1}"]["knowledge_summarizer"][entity] = log
-            log_all[f"turn_{i+1}"]["knowledge"] = state.knowledge.copy()
-            log_all[f"turn_{i+1}"]["thoughts"] = state.thoughts.copy()
+            log_all[f"turn_{i+1}"]["state"] = {
+                "thoughts": state.thoughts.copy(),
+                "knowledge": state.knowledge.copy(),
+            }
             state.step()
         # 5. Answer
         answer_output, log = await self.aanswer(state)

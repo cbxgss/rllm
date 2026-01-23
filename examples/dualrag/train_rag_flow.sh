@@ -12,30 +12,36 @@ export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:False"
 export VLLM_USE_V1=1
 export VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
 export VLLM_ENGINE_ITERATION_TIMEOUT_S=100000000000
-export CUDA_VISIBLE_DEVICES=0
 
-n_gpus=1
+export CUDA_VISIBLE_DEVICES=0,1
+GPU_LIST=${CUDA_VISIBLE_DEVICES//,/ }
+n_gpus=$(echo $GPU_LIST | wc -w)
+
+export search_url="127.0.0.1"
+
+model_path="Qwen/Qwen3-0.6B"
 max_model_len=$((1024 * 18))
 max_prompt_length=$((1024 * 16))
 max_response_length=$((1024 * 2))
 sp=1
 actor_ppo_max_token_len=$(((max_prompt_length + max_response_length) / sp))
 infer_ppo_max_token_len=$(((max_prompt_length + max_response_length) / sp))
-n=4
+n=8
 
 export method=dualrag
 export retrieve_mode=local
+adv=rloo
 timestamp=$(date +%Y%m%d_%H%M%S)
 export log_dir="${base_dir}/outputs/$(date +%Y-%m-%d/%H-%M-%S)"
-experiment_name=${method}-${retrieve_mode}-${timestamp}
+experiment_name=${method}-${retrieve_mode}-${adv}-${timestamp}
 
 python3 -m examples.dualrag.train_rag_flow \
-    algorithm.adv_estimator=grpo \
+    algorithm.adv_estimator=${adv} \
     data.train_batch_size=128 \
     data.val_batch_size=1024 \
     data.max_prompt_length=${max_prompt_length} \
     data.max_response_length=${max_response_length} \
-    actor_rollout_ref.model.path=Qwen/Qwen3-0.6B \
+    actor_rollout_ref.model.path=${model_path} \
     actor_rollout_ref.model.use_remove_padding=True \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
     actor_rollout_ref.rollout.tensor_model_parallel_size=1 \
@@ -73,14 +79,14 @@ python3 -m examples.dualrag.train_rag_flow \
     rllm.stepwise_advantage.enable=True \
     rllm.stepwise_advantage.mode=per_step \
     trainer.critic_warmup=0 \
-    trainer.logger=['console', 'wandb', 'swanlab'] \
+    trainer.logger=['console','wandb','swanlab'] \
     trainer.project_name='DualRAG' \
     trainer.experiment_name=${experiment_name} \
     trainer.val_before_train=True \
-    trainer.n_gpus_per_node=1 \
+    trainer.n_gpus_per_node=${n_gpus} \
     trainer.nnodes=1 \
-    trainer.save_freq=30 \
-    trainer.test_freq=30 \
+    trainer.save_freq=10 \
+    trainer.test_freq=10 \
     trainer.default_hdfs_dir=null \
     trainer.total_epochs=100 \
     rllm.workflow.use_workflow=True

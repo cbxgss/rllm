@@ -121,7 +121,7 @@ DualRAG:
     {docs}
 
   Answer: |
-    ### Task Description
+    ## Task Description
 
     You are solving a knowledge-based question using retrieved information.
 
@@ -141,14 +141,14 @@ DualRAG:
       - Event or proper noun (e.g., *Cold War*)
       - Common noun when required (e.g., *comedy*)
 
-    ### Retrieved Relevant Knowledge
+    ## Retrieved Relevant Knowledge
 
     {knowledge}
 
-    ### Question Being Addressed
+    ## Question Being Addressed
 
     {question}
 
-    ### Your Previous Reasoning
+    ## Your Previous Reasoning
 
     {thoughts}

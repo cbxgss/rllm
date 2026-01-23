@@ -1,7 +1,11 @@
+import os
 from typing import Any
 import requests
 import aiohttp
 from tenacity import retry, stop_never, wait_random_exponential, stop_after_attempt
+
+
+search_url = os.getenv("search_url", "127.0.0.1")
 
 
 class FastApiRetriever:
@@ -76,13 +80,13 @@ class FastApiRetriever:
 
 @retry(reraise=True, stop=stop_never, wait=wait_random_exponential(min=1, max=10))
 async def search(query: str, timeout: int = 180) -> dict[str, Any]:
-    retriever = FastApiRetriever("http://localhost:8011")
+    retriever = FastApiRetriever(f"http://{search_url}:8011")
     result = await retriever.aretrieve("wiki", query, topk=10)
     return result
 
 if __name__ == "__main__":
     async def main():
-        retriever = FastApiRetriever("http://localhost:8011")
+        retriever = FastApiRetriever(f"http://{search_url}:8011")
         corpus_len = await retriever.acorpus_len()
         print(f"corpus_len: {corpus_len}")
         result = await retriever.aretrieve("wiki", "What is the second highest-grossing Kannada movie of all time?", topk=5)

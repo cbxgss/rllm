@@ -1,9 +1,11 @@
+import os
 from typing import Any
 import aiohttp
 from tenacity import retry, stop_after_attempt, stop_never, wait_random_exponential
 
 
-MASTER_URL = "http://127.0.0.1:8020/search"
+search_url = os.getenv("search_url", "127.0.0.1")
+MASTER_URL = f"http://{search_url}:8020/search"
 
 
 @retry(reraise=True, stop=stop_never, wait=wait_random_exponential(min=1, max=10))

@@ -37,7 +37,7 @@ def _convert_multiline_str(obj):
 def save_dict_to_yaml(
     data: dict,
     path: str,
-    width: int = 4096,
+    width: int = 512,
 ):
     """
     将 dict 保存为 YAML 文件：
