@@ -1,8 +1,8 @@
 import random
-from pathlib import Path
 
 import datasets
 from rllm.data.dataset import DatasetRegistry
+
 
 DATASETS = {
     "nq": ("RUC-NLPIR/FlashRAG_datasets", "nq"),
@@ -25,8 +25,7 @@ TRAIN_SIZE = 2000
 TEST_SIZE = 512
 
 
-def prepare_rag_data(output_base="data/qa"):
-    output_base = Path(output_base)
+def prepare_rag_data():
     all_datasets = {}
 
     for name, (hf_name, subset) in DATASETS.items():
@@ -52,11 +51,10 @@ def prepare_rag_data(output_base="data/qa"):
                 answer = item["golden_answers"]  # ground_truth 必须存在
 
                 selected.append({
-                    "id": f"{new_split}_{i}",
+                    "id": f"{new_split}_{raw_id}",
                     "question": question,
                     "ground_truth": answer,
                     "data_source": name,
-                    "raw_id": raw_id,
                 })
 
             # 注册 Dataset

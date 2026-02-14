@@ -1,11 +1,9 @@
 import os
+from dotenv import load_dotenv
 from typing import Any
 import requests
 import aiohttp
 from tenacity import retry, stop_never, wait_random_exponential, stop_after_attempt
-
-
-search_url = os.getenv("search_url", "127.0.0.1")
 
 
 class FastApiRetriever:
@@ -80,11 +78,14 @@ class FastApiRetriever:
 
 @retry(reraise=True, stop=stop_never, wait=wait_random_exponential(min=1, max=10))
 async def search(query: str, timeout: int = 180) -> dict[str, Any]:
+    load_dotenv(os.path.join(os.path.dirname(__file__), ".env"), override=True)
+    search_url = os.getenv("search_url", "127.0.0.1")
     retriever = FastApiRetriever(f"http://{search_url}:8011")
     result = await retriever.aretrieve("wiki", query, topk=10)
     return result
 
 if __name__ == "__main__":
+    search_url = os.getenv("search_url", "127.0.0.1")
     async def main():
         retriever = FastApiRetriever(f"http://{search_url}:8011")
         corpus_len = await retriever.acorpus_len()
