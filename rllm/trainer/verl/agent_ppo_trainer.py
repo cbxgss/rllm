@@ -165,6 +165,11 @@ class AgentPPOTrainer(RayPPOTrainer):
                     repeat_times=self.config.actor_rollout_ref.rollout.n,
                     interleave=True,
                 )
+                # 添加 meta_info epoch 和 step 信息 for logger
+                if batch.meta_info is None:
+                    batch.meta_info = {}
+                batch.meta_info["epoch"] = epoch
+                batch.meta_info["step"] = self.global_steps
 
                 metrics = {}
                 timing_raw = {}
