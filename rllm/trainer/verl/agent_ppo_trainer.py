@@ -52,8 +52,6 @@ class AgentPPOTrainer(RayPPOTrainer):
         self.agent_class = agent_class
         self.env_args = env_args or {}
         self.agent_args = agent_args or {}
-        # Store configuration switches from agent_args
-        self.config_switches = self.agent_args.pop("_config_switches", {}) if self.agent_args else {}
 
         assert self.config.actor_rollout_ref.hybrid_engine, "Only hybrid engine is supported"
         assert self.config.actor_rollout_ref.rollout.mode == "async", "Only async rollout mode is supported"
@@ -176,12 +174,6 @@ class AgentPPOTrainer(RayPPOTrainer):
                 with marked_timer("step", timing_raw):
                     self.init_envs_and_agents(batch)
 
-                    # Add epoch and step info to meta_info for logging
-                    if batch.meta_info is None:
-                        batch.meta_info = {}
-                    batch.meta_info["epoch"] = epoch
-                    batch.meta_info["step"] = self.global_steps
-
                     if self.config.rllm.stepwise_advantage.enable:
                         final_gen_batch_output = self.generate_agent_steps(timing_raw=timing_raw, meta_info=batch.meta_info, uids=batch.non_tensor_batch["uid"])
                         repeat_counts = final_gen_batch_output.meta_info["repeat_counts"]
@@ -192,14 +184,9 @@ class AgentPPOTrainer(RayPPOTrainer):
                         batch = batch.union(final_gen_batch_output)
                         batch = self._pad_dataproto_to_world_size(batch=batch)
                     else:
-                        final_gen_batch_output, generate_metrics, valid_indices = self.generate_agent_trajectory(timing_raw=timing_raw, meta_info=batch.meta_info)
-                        # Filter batch to keep only valid trajectories (those without tool errors)
-                        if valid_indices and len(valid_indices) < len(batch.batch):
-                            batch = batch[valid_indices]
+                        final_gen_batch_output, generate_metrics = self.generate_agent_trajectory(timing_raw=timing_raw, meta_info=batch.meta_info)
                         batch = batch.union(final_gen_batch_output)
                         metrics.update(generate_metrics)
-                        # Pad batch to world size after filtering
-                        batch = self._pad_dataproto_to_world_size(batch=batch)
 
                     # compute values
                     if self.use_critic:
@@ -405,22 +392,16 @@ class AgentPPOTrainer(RayPPOTrainer):
                             config=self.config.algorithm,
                         )
 
-                    if self.config.rllm.stepwise_advantage.enable and self.config.rllm.stepwise_advantage.mode == "broadcast":
-                        # remove the padded last steps
-                        # Merging the separated out steps using the advantage from last steps
-                        self._stepwise_advantage_broadcast(batch, other_step_batch=other_step_batch)
-                        # batch = batch.merge(other_step_batch)
-                        batch = DataProto.concat([batch, other_step_batch])
+                        if self.config.rllm.stepwise_advantage.enable and self.config.rllm.stepwise_advantage.mode == "broadcast":
+                            # remove the padded last steps
+                            # Merging the separated out steps using the advantage from last steps
+                            self._stepwise_advantage_broadcast(batch, other_step_batch=other_step_batch)
+                            # batch = batch.merge(other_step_batch)
+                            batch = DataProto.concat([batch, other_step_batch])
 
-                    # 5.4.4 Exceeding the token budget: compute advantage, exclude from updates
-                    # Save mask for truncated samples (hit token limit)
-                    truncated_mask = None
-                    enable_token_budget_handling = self.config_switches.get("enable_token_budget_handling", True)
-                    if enable_token_budget_handling:
-                        # Truncated samples have attention_mask[:, -1] == 0 (padded)
-                        truncated_mask = batch.batch["attention_mask"][:, -1] == 0
-                        truncated_count = truncated_mask.sum().item()
-                        metrics["batch/truncated_samples_count"] = truncated_count
+                    if self.config.rllm.mask_truncated_samples:
+                        mask = batch.batch["attention_mask"][:, -1] == 1
+                        batch = batch[~mask]
 
                     batch = self._pad_dataproto_to_world_size(batch=batch)
                     # balance the number of valid tokens on each dp rank.
@@ -431,39 +412,18 @@ class AgentPPOTrainer(RayPPOTrainer):
                     # compute global_valid tokens
                     batch.meta_info["global_token_num"] = torch.sum(batch.batch["attention_mask"], dim=-1).tolist()
 
-                    # update critic (include truncated samples for better critic learning)
-                    critic_batch = batch
+                    # update critic
                     if self.use_critic:
                         with marked_timer("update_critic", timing_raw):
-                            critic_output = self.critic_wg.update_critic(critic_batch)
+                            critic_output = self.critic_wg.update_critic(batch)
                         critic_output_metrics = reduce_metrics(critic_output.meta_info["metrics"])
                         metrics.update(critic_output_metrics)
 
                     # implement critic warmup
                     if self.config.trainer.critic_warmup <= self.global_steps:
-                        # 5.4.4: Exclude truncated samples from actor loss and backpropagation
-                        actor_batch = batch
-                        if truncated_mask is not None and truncated_mask.any():
-                            # Reconstruct truncated_mask after padding/balancing
-                            # Use attention_mask[:, -1] to identify truncated samples
-                            truncated_after_pad = actor_batch.batch["attention_mask"][:, -1] == 0
-                            # Use config_switches to decide whether to filter
-                            if enable_token_budget_handling:
-                                actor_batch = actor_batch[~truncated_after_pad]
-                                # Pad actor_batch to world size after filtering
-                                if len(actor_batch.batch) > 0 and len(actor_batch.batch) % self.actor_rollout_wg.world_size != 0:
-                                    # Calculate how many samples to add
-                                    current_size = len(actor_batch.batch)
-                                    world_size = self.actor_rollout_wg.world_size
-                                    padding_size = (world_size - (current_size % world_size)) % world_size
-                                    # If padding needed, create padding samples
-                                    if padding_size > 0:
-                                        from verl.protocol import pad_dataproto_to_divisor
-                                        actor_batch = pad_dataproto_to_divisor(actor_batch, self.actor_rollout_wg.world_size)
-
                         # update actor
                         with marked_timer("update_actor", timing_raw):
-                            actor_output = self.actor_rollout_wg.update_actor(actor_batch)
+                            actor_output = self.actor_rollout_wg.update_actor(batch)
                         actor_output_metrics = reduce_metrics(actor_output.meta_info["metrics"])
                         metrics.update(actor_output_metrics)
 
@@ -500,6 +460,13 @@ class AgentPPOTrainer(RayPPOTrainer):
         uid_lst = []
         for test_data in self.val_dataloader:
             test_batch = DataProto.from_single_dict(test_data)
+            print(f"Non-tensor batch keys: {test_batch.non_tensor_batch.keys()}")
+            data_source_list = [
+                x.get("data_source", "unknown") if isinstance(x, dict) else "unknown"
+                for x in test_batch.non_tensor_batch["extra_info"]
+            ]
+            test_batch.non_tensor_batch["data_source"] = np.array(data_source_list, dtype=object)
+            print(f"Data sources in batch: {set(test_batch.non_tensor_batch['data_source'])}")
             test_batch.non_tensor_batch["uid"] = np.array([str(uuid.uuid4()) for _ in range(len(test_batch.batch))], dtype=object)
             n_val_samples = self.config.actor_rollout_ref.rollout.val_kwargs.n
             test_batch = test_batch.repeat(repeat_times=n_val_samples, interleave=True)
@@ -520,18 +487,14 @@ class AgentPPOTrainer(RayPPOTrainer):
                 last_step_indices = np.where(is_last_step == True)[0]
                 test_output_gen_batch = test_output_gen_batch.select_idxs(last_step_indices)  # This batch only has last steps
             else:
-                test_output_gen_batch, _, valid_indices = self.generate_agent_trajectory(meta_info=test_batch.meta_info)
-                # Filter test_batch to keep only valid trajectories (those without tool errors)
-                if valid_indices and len(valid_indices) < len(test_batch.batch):
-                    test_batch = test_batch[valid_indices]
+                test_output_gen_batch, _ = self.generate_agent_trajectory(meta_info=test_batch.meta_info)
 
             test_batch = test_batch.union(test_output_gen_batch)
 
             reward_tensor = test_batch.batch["token_level_scores"]
 
             rewards_lst.append(reward_tensor.sum(-1).cpu())
-            # Use the data_source extracted from original test_data
-            data_source_lst.append(np.array([data_source] * reward_tensor.shape[0]))
+            data_source_lst.append(test_batch.non_tensor_batch.get("data_source", ["unknown"] * reward_tensor.shape[0]))
             uid_lst.append(test_batch.non_tensor_batch["uid"])
 
         reward_tensor = torch.cat(rewards_lst, dim=0)  # (batch_size,)
@@ -586,8 +549,8 @@ class AgentPPOTrainer(RayPPOTrainer):
             meta_info (optional): Metadata for veRL generation.
 
         Returns:
-            tuple: (DataProto, metrics, valid_indices) - Representation of the agent's trajectories,
-                   metrics for the generation process, and indices of valid trajectories.
+            DataProto: Representation of the agent's trajectories.
+            Dict[str:float]: Metrics for the generation process.
         """
         if timing_raw is None:
             timing_raw = {}
@@ -604,8 +567,8 @@ class AgentPPOTrainer(RayPPOTrainer):
 
         with marked_timer("transform_trajectory", timing_raw):
             # Transform the raw trajectories into DataProto format.
-            final_gen_batch_output, metrics, valid_indices = self._transform_agent_trajectories(trajectories)
-        return final_gen_batch_output, metrics, valid_indices
+            final_gen_batch_output, metrics = self._transform_agent_trajectories(trajectories)
+        return final_gen_batch_output, metrics
 
     def generate_agent_steps(self, timing_raw=None, meta_info=None, uids=None):
         """
@@ -635,60 +598,14 @@ class AgentPPOTrainer(RayPPOTrainer):
     def _transform_agent_trajectories(self, trajectories: list[dict]):
         """
         Helper function to transform a list of trajectories into tokenized DataProto format.
-        Filters out trajectories with search errors (timeout, connection errors, etc.).
 
         Args:
             trajectories (list of dict): List of trajectories to process.
 
         Returns:
-            tuple: (DataProto, valid_indices) - DataProto containing input tokens, masks, and rewards,
-                  and indices of valid trajectories (excluding those with tool errors).
+            DataProto: A structured dataset containing input tokens, masks, and rewards.
         """
         from verl.utils.torch_functional import pad_sequence_to_length
-
-        # Get configuration switches from agent_args
-        discard_search_errors = self.config_switches.get("discard_search_errors", True)
-        step_limit_handling = self.config_switches.get("enable_step_limit_handling", True)
-
-        # Filter out trajectories with tool errors or max_steps exceeded
-        filtered_trajectories = []
-        valid_indices = []  # Track which trajectories are kept
-        tool_error_count = 0
-        max_steps_exceeded_count = 0
-        for idx, traj in enumerate(trajectories):
-            metrics = traj.get("metrics", {})
-
-            # Check for tool errors in trajectory metrics (Search errors: discard directly)
-            has_tool_error = metrics.get("has_tool_error", False)
-
-            # Check for max_steps exceeded (5.4.3: stop + 0 reward)
-            terminated_reason = metrics.get("terminated_reason")
-            is_max_steps_exceeded = terminated_reason == "max_steps_exceeded"
-
-            if has_tool_error and discard_search_errors:
-                tool_error_count += 1
-                continue  # Discard this trajectory completely
-
-            if is_max_steps_exceeded and not step_limit_handling:
-                # If step limit handling is disabled, discard trajectories that hit max_steps
-                max_steps_exceeded_count += 1
-                continue
-
-            if is_max_steps_exceeded and step_limit_handling:
-                max_steps_exceeded_count += 1
-                # Keep this trajectory but it will have 0 reward from environment
-
-            filtered_trajectories.append(traj)
-            valid_indices.append(idx)
-
-        trajectories = filtered_trajectories
-
-        # Log the number of discarded/affected trajectories for monitoring
-        metrics = {}
-        if tool_error_count > 0:
-            metrics["batch/tool_errors_discarded"] = tool_error_count
-        if max_steps_exceeded_count > 0:
-            metrics["batch/max_steps_exceeded_count"] = max_steps_exceeded_count
 
         all_initial_tokens_list = []
         all_response_tokens_list = []
@@ -712,20 +629,9 @@ class AgentPPOTrainer(RayPPOTrainer):
 
         # Flatten traj_metrics into a dict of lists
         traj_metrics = {k: [d[k] for d in traj_metrics] for k in traj_metrics[0]}
-        # Aggregate metrics (mean, min, max) - only for numeric values
+        # Aggregate metrics (mean, min, max)
         for k, v_list in traj_metrics.items():
-            # Filter out None and non-numeric values
-            filtered_list = []
-            for v in v_list:
-                if v is not None and isinstance(v, (int, float)) and v >= 0:
-                    filtered_list.append(v)
-                elif v is not None and isinstance(v, str):
-                    # Skip string values (like terminated_reason)
-                    continue
-                elif v is not None and v < 0:
-                    # Skip negative values
-                    continue
-            v_list = filtered_list
+            v_list = [v for v in v_list if v is not None and v >= 0]
             if not v_list:
                 continue
             v_list = np.array(v_list)
@@ -807,7 +713,7 @@ class AgentPPOTrainer(RayPPOTrainer):
 
         self.visualize_trajectory(DataProto.from_dict(tensors=tensor_batch))
 
-        return DataProto.from_dict(tensors=tensor_batch), metrics, valid_indices
+        return DataProto.from_dict(tensors=tensor_batch), metrics
 
     def visualize_trajectory(self, tensor_batch, sample_idx=0, max_samples=1, mask_key="response_mask"):
         """
