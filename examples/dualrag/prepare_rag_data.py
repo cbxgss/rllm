@@ -7,7 +7,7 @@ from rllm.data.dataset import DatasetRegistry
 DATASETS = {
     "nq": ("RUC-NLPIR/FlashRAG_datasets", "nq"),
     "tq": ("RUC-NLPIR/FlashRAG_datasets", "triviaqa"),
-    "hotpotqqa": ("RUC-NLPIR/FlashRAG_datasets", "hotpotqa"),
+    "hotpotqa": ("RUC-NLPIR/FlashRAG_datasets", "hotpotqa"),
     "2wikimultihopqa": ("RUC-NLPIR/FlashRAG_datasets", "2wikimultihopqa"),
     "musique": ("RUC-NLPIR/FlashRAG_datasets", "musique"),
 }
@@ -15,7 +15,7 @@ DATASETS = {
 RAW2NEW = {
     "nq": {"train": "train", "test": "test"},
     "tq": {"train": "train", "test": "test"},
-    "hotpotqqa": {"train": "train", "dev": "test"},
+    "hotpotqa": {"train": "train", "dev": "test"},
     "2wikimultihopqa": {"train": "train", "dev": "test"},
     "musique": {"train": "train", "dev": "test"},
 }

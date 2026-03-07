@@ -1,6 +1,7 @@
 import copy
 import json
 import logging
+import os
 import uuid
 from typing import Any
 
@@ -26,6 +27,8 @@ class ToolAgent(BaseAgent):
         parser_name="qwen",
         tools: list[str] | None = None,
         tool_map: dict[str, type[Tool]] | None = None,
+        log_dir: str | None = None,
+        enable_logging: bool = False,
     ):
         """
         Initialize the ToolAgent.
@@ -35,11 +38,15 @@ class ToolAgent(BaseAgent):
             parser_name: Name of the parser to use for tool calls.
             tools: List of tool names available to the agent (legacy behavior).
             tool_map: Dictionary mapping tool names to Tool classes (new behavior).
+            log_dir: Directory to save trajectory logs.
+            enable_logging: Whether to enable trajectory logging.
         """
         if tool_map is not None and tools is not None:
             raise ValueError("Cannot specify both 'tools' and 'tool_map' parameters")
 
         self.system_prompt = system_prompt
+        self.log_dir = log_dir
+        self.enable_logging = enable_logging
 
         # Initialize MultiTool with either tools or tool_map
         if tool_map is not None:
@@ -58,6 +65,12 @@ class ToolAgent(BaseAgent):
         self._trajectory = Trajectory()
         self.messages: list[dict[str, Any]] = []
         self.current_observation = None
+
+        # Logging state
+        self.current_uid: str | None = None
+        self.step_count: int = 0
+        self.log_data: dict = {}
+
         self.reset()  # Call reset to set initial state
 
     def _format_observation_as_messages(self, obs: Any) -> list[dict]:
@@ -99,6 +112,32 @@ class ToolAgent(BaseAgent):
             self._trajectory.steps[-1].done = done
             self._trajectory.steps[-1].info = info
 
+        # Log tool outputs if available
+        if self.enable_logging and isinstance(observation, dict) and "tool_outputs" in observation:
+            step_key = f"step_{self.step_count}"
+            if step_key in self.log_data:
+                self.log_data[step_key]["tool_outputs"] = observation["tool_outputs"]
+                self.log_data[step_key]["reward"] = reward
+                self.log_data[step_key]["done"] = done
+                if info:
+                    self.log_data[step_key]["info"] = info
+
+            self.step_count += 1
+
+    def _save_step_log(self, model_output: dict[str, Any], tool_calls_dict: list[dict], tool_outputs: dict[str, str] | None = None):
+        """Save step information to log data."""
+        if not self.enable_logging or not self.log_dir or not self.current_uid:
+            return
+
+        step_key = f"step_{self.step_count}"
+        self.log_data[step_key] = {
+            "model_output": model_output,
+            "tool_calls": tool_calls_dict,
+        }
+
+        if tool_outputs:
+            self.log_data[step_key]["tool_outputs"] = tool_outputs
+
     def update_from_model(self, response: str, **kwargs) -> Action:
         """
         Updates the agent's state based on the model's response.
@@ -121,6 +160,14 @@ class ToolAgent(BaseAgent):
         except Exception as e:
             logger.error(f"Failed to parse tool calls from string response: {e}")
             tool_calls_dict = []  # Indicate no valid tool calls parsed
+
+        # Log step information
+        self._save_step_log(
+            model_output={
+                "content": assistant_content,
+            },
+            tool_calls_dict=tool_calls_dict,
+        )
 
         # Append assistant message to chat history
         assistant_message = {"role": "assistant", "content": assistant_content}
@@ -150,10 +197,91 @@ class ToolAgent(BaseAgent):
 
         return Action(action=tool_calls_dict)
 
-    def reset(self):
-        """Resets the agent's state for a new episode."""
+    def save_trajectory_log(self, final_reward: float, metadata: dict | None = None):
+        """
+        Save the trajectory log to a YAML file.
+
+        Args:
+            final_reward: The final reward for the episode.
+            metadata: Optional metadata dictionary to include in the log.
+        """
+        if not self.enable_logging or not self.log_dir or not self.current_uid:
+            return
+
+        import yaml
+
+        class LiteralStr(str):
+            """Helper class for YAML multiline strings."""
+            pass
+
+        def _literal_str_representer(dumper, data):
+            return dumper.represent_scalar("tag:yaml.org,2002:str", data, style="|")
+
+        yaml.add_representer(LiteralStr, _literal_str_representer)
+
+        def _convert_multiline_str(obj):
+            """Recursively convert strings with newlines to LiteralStr."""
+            if isinstance(obj, str):
+                if "\n" in obj:
+                    return LiteralStr(obj)
+                return obj
+            elif isinstance(obj, dict):
+                return {k: _convert_multiline_str(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [_convert_multiline_str(i) for i in obj]
+            else:
+                return obj
+
+        # Create log directory structure
+        epoch = metadata.get("epoch", 0) if metadata else 0
+        step = metadata.get("step", 0) if metadata else 0
+        uid_dir = os.path.join(self.log_dir, f"epoch_{epoch}", f"step_{step}", self.current_uid)
+        os.makedirs(uid_dir, exist_ok=True)
+
+        # Prepare log data
+        log_all = {
+            "steps": self.log_data,
+            "final_reward": final_reward,
+            "total_steps": self.step_count,
+        }
+
+        if metadata:
+            log_all["metadata"] = metadata
+
+        # Convert multiline strings and save
+        log_all = _convert_multiline_str(log_all)
+        log_path = os.path.join(uid_dir, "log.yaml")
+        with open(log_path, "w", encoding="utf-8") as f:
+            yaml.dump(
+                log_all,
+                f,
+                allow_unicode=True,
+                sort_keys=False,
+                width=512,
+                default_flow_style=False,
+            )
+
+        logger.info(f"Saved trajectory log to {log_path}")
+
+    def reset(self, uid: str | None = None):
+        """
+        Resets the agent's state for a new episode.
+
+        Args:
+            uid: Optional unique identifier for this episode, used for logging.
+        """
         self._trajectory = Trajectory()
         self.messages = [{"role": "system", "content": self.system_prompt + self.tools_prompt}]
+
+        # Reset logging state
+        # Only set current_uid if logging is enabled and uid is provided
+        if self.enable_logging and self.log_dir and uid:
+            self.current_uid = uid
+        else:
+            self.current_uid = None
+
+        self.step_count = 0
+        self.log_data = {}
 
     @property
     def chat_completions(self) -> list[dict[str, str]]:

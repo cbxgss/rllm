@@ -28,7 +28,7 @@ class AgentTrainer:
         env_args: dict[str, Any] | None = None,
         config: dict[str, Any] | list[str] | None = None,
         train_dataset: Dataset | None = None,
-        val_dataset: Dataset | None = None,
+        val_dataset: Dataset | list[Dataset] | None = None,
         backend: Literal["verl", "fireworks"] = "verl",
     ):
         """
@@ -84,7 +84,10 @@ class AgentTrainer:
         if train_dataset is not None and self.config is not None and hasattr(self.config, "data"):
             self.config.data.train_files = train_dataset.get_verl_data_path()
         if val_dataset is not None and self.config is not None and hasattr(self.config, "data"):
-            self.config.data.val_files = val_dataset.get_verl_data_path()
+            if isinstance(val_dataset, list):
+                self.config.data.val_files = [ds.get_verl_data_path() for ds in val_dataset]
+            else:
+                self.config.data.val_files = val_dataset.get_verl_data_path()
 
     def train(self):
         """

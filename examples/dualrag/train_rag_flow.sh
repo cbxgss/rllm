@@ -13,13 +13,14 @@ export VLLM_USE_V1=1
 export VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
 export VLLM_ENGINE_ITERATION_TIMEOUT_S=100000000000
 
-export CUDA_VISIBLE_DEVICES=0,1
+export CUDA_VISIBLE_DEVICES=0,1,2,3
+# export CUDA_VISIBLE_DEVICES=5,6
 GPU_LIST=${CUDA_VISIBLE_DEVICES//,/ }
 n_gpus=$(echo $GPU_LIST | wc -w)
 
 export search_url="127.0.0.1"
 
-model_path="Qwen/Qwen3-0.6B"
+model_path="Qwen/Qwen3-1.7B"
 max_model_len=$((1024 * 18))
 max_prompt_length=$((1024 * 16))
 max_response_length=$((1024 * 2))
@@ -33,12 +34,12 @@ export retrieve_mode=local
 adv=rloo
 timestamp=$(date +%Y%m%d_%H%M%S)
 export log_dir="${base_dir}/outputs/$(date +%Y-%m-%d/%H-%M-%S)"
-experiment_name=${method}-${retrieve_mode}-${adv}-${timestamp}
+experiment_name=${method}-${retrieve_mode}-asearcher-${adv}-${timestamp}
 
 python3 -m examples.dualrag.train_rag_flow \
     algorithm.adv_estimator=${adv} \
     data.train_batch_size=128 \
-    data.val_batch_size=1024 \
+    data.val_batch_size=512 \
     data.max_prompt_length=${max_prompt_length} \
     data.max_response_length=${max_response_length} \
     actor_rollout_ref.model.path=${model_path} \

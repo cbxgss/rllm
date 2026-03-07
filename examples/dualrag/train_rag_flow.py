@@ -11,8 +11,9 @@ from rllm.trainer.agent_trainer import AgentTrainer
 
 @hydra.main(config_path="pkg://rllm.trainer.config", config_name="agent_ppo_trainer", version_base=None)
 def main(config):
-    train_dataset = DatasetRegistry.load_dataset("hotpotqqa", "train")
-    test_dataset = DatasetRegistry.load_dataset("hotpotqqa", "test")
+    # train_dataset = DatasetRegistry.load_dataset("hotpotqa", "train")
+    train_dataset = DatasetRegistry.load_dataset("asearcher", "train")
+    test_dataset = DatasetRegistry.load_dataset("hotpotqa", "test")
 
     hydra_log_dir = HydraConfig.get().runtime.output_dir
     trainer = AgentTrainer(

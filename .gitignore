@@ -1,3 +1,5 @@
+*.bak.py
+
 # Byte-compiled / optimized / DLL files
 examples/dualrag/server/web/firefox
 examples/dualrag/server/web/geckodriver

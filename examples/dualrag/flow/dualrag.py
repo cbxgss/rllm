@@ -180,10 +180,9 @@ class DualRAG:
         }
 
     async def generate_answer(self, question: str, uid_dir: str) -> tuple[list[Trajectory], str]:
-        trajs: list[Trajectory] = []
         state = State(question, uid_dir)
         log_all = {}
-        for i in range(3):  # 最多三轮
+        for i in range(5):  # 最多5轮
             log_all[f"turn_{i+1}"] = {}
             # 1. Reasoner
             reason_content, log = await self.areason(state)

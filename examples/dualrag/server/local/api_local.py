@@ -10,7 +10,6 @@ class FastApiRetriever:
     def __init__(self, url: str):
         self.url = url
 
-    @retry(reraise=True, stop=stop_after_attempt(3), wait=wait_random_exponential(multiplier=1, min=1, max=10))
     def corpus_len(self) -> int:
         with requests.Session() as session:
             session.trust_env = False

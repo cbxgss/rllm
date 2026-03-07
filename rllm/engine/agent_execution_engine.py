@@ -192,7 +192,7 @@ class AgentExecutionEngine:
         info["max_steps"] = self.max_steps
 
         # Reset agent
-        agent.reset()
+        agent.reset(uid=application_id)
         # Update agent internal state from environment.
         agent.update_from_env(
             observation=observation,  # Raw observation from environment
@@ -205,7 +205,7 @@ class AgentExecutionEngine:
         prompt_token_len = len(prompt_tokens)
         # Note, this should never happen!
         if prompt_token_len > self.max_prompt_length:
-            agent.reset()
+            agent.reset(uid=application_id)
             raise Exception(f"Trajectory {idx}: initial prompt length {prompt_token_len} already exceeded max_prompt_length {self.max_prompt_length}, retrying")
 
         for step_idx in range(self.max_steps):
@@ -353,6 +353,18 @@ class AgentExecutionEngine:
             reward = await loop.run_in_executor(self.executor, env.compute_final_reward)
             reward_time = time.time() - start_time
             cur_step.reward = reward
+
+        # Save trajectory log if logging is enabled
+        if hasattr(agent, "save_trajectory_log"):
+            # Extract epoch and step from meta_info if available
+            metadata = {}
+            if hasattr(self, "meta_info") and self.meta_info:
+                metadata = {
+                    "epoch": self.meta_info.get("epoch", 0),
+                    "step": self.meta_info.get("step", 0),
+                }
+            agent.save_trajectory_log(final_reward=reward, metadata=metadata)
+
         # Closing environment using the executor.
         await loop.run_in_executor(self.executor, env.close)
         if termination_reason:
@@ -420,6 +432,8 @@ class AgentExecutionEngine:
     async def trajectory_generator(self, reset_seed=0, timing_raw=None, mode="Text", **kwargs):
         if timing_raw is None:
             timing_raw = {}
+        # Store meta_info for use in trajectory logging
+        self.meta_info = kwargs.get("meta_info", {})
         assert all(env is not None and isinstance(env, BaseEnv) for env in self.envs), "All environments must be inheriting from BaseEnv"
         assert all(env.is_multithread_safe() for env in self.envs), "All environments must be multithread safe for async engine"  # type: ignore
         if not hasattr(self, "executor") or self.executor._shutdown:

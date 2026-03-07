@@ -41,11 +41,11 @@ class BaseMetric:
         scores = [self.cal_one(response, golden_answer) for golden_answer in golden_answers]
         return max(scores)
 
-    async def cal_one(self, question: str, response: str, answer: str, path):
+    async def acal_one(self, question: str, response: str, answer: str, path):
         raise NotImplementedError
 
-    async def cal(self, question: str, response: str, golden_answers: list[str], path):
-        task = [self.cal_one(question, response, golden_answer, path) for golden_answer in golden_answers]
+    async def acal(self, question: str, response: str, golden_answers: list[str], path):
+        task = [self.acal_one(question, response, golden_answer, path) for golden_answer in golden_answers]
         scores = await asyncio.gather(*task)
         return max(scores)
 
