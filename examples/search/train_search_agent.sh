@@ -22,7 +22,9 @@ n_gpus=$(echo $GPU_LIST | wc -w)
 
 export search_url="127.0.0.1"
 
-model_path="Qwen/Qwen3-1.7B"
+# model_path="Qwen/Qwen3-1.7B"
+model_path="/fs-computility-new/Uma4agi/shared/models/Qwen3-1.7B"
+
 max_model_len=$((1024 * 32))
 max_prompt_length=$((1024 * 2))
 max_response_length=$((1024 * 30))
