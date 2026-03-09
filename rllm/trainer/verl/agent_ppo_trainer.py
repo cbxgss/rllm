@@ -518,7 +518,7 @@ class AgentPPOTrainer(RayPPOTrainer):
                 last_step_indices = np.where(is_last_step == True)[0]
                 test_output_gen_batch = test_output_gen_batch.select_idxs(last_step_indices)  # This batch only has last steps
             else:
-                test_output_gen_batch, _ = self.generate_agent_trajectory(meta_info=test_batch.meta_info)
+                test_output_gen_batch, _, _ = self.generate_agent_trajectory(meta_info=test_batch.meta_info)
 
             test_batch = test_batch.union(test_output_gen_batch)
 
