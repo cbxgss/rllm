@@ -200,6 +200,7 @@ class AgentPPOTrainer(RayPPOTrainer):
                     else:
                         final_gen_batch_output, generate_metrics, _ = self.generate_agent_trajectory(timing_raw=timing_raw, meta_info=batch.meta_info)
                         batch = batch.union(final_gen_batch_output)
+                        batch = self._pad_dataproto_to_world_size(batch=batch)
                         metrics.update(generate_metrics)
 
                     # compute values
