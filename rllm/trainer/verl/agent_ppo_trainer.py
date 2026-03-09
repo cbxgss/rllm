@@ -52,6 +52,8 @@ class AgentPPOTrainer(RayPPOTrainer):
         self.agent_class = agent_class
         self.env_args = env_args or {}
         self.agent_args = agent_args or {}
+        # 从 agent_args 中提取配置开关
+        self.config_switches = self.agent_args.pop("_config_switches", {}) if self.agent_args else {}
 
         assert self.config.actor_rollout_ref.hybrid_engine, "Only hybrid engine is supported"
         assert self.config.actor_rollout_ref.rollout.mode == "async", "Only async rollout mode is supported"
@@ -60,6 +62,13 @@ class AgentPPOTrainer(RayPPOTrainer):
             print("Using step-level advantage, max_prompt_length and max_response_length will be applied step-wise")
         else:
             print("Using trajectory-level advantage, max_prompt_length and max_response_length will be applied episode-wise")
+
+        # 打印配置开关状态
+        print("异常轨迹处理配置:")
+        print(f"  5.4.1 Outlier Suppression: {self.agent_args.get('enable_outlier_suppression', False)}")
+        print(f"  5.4.2 Search errors discard: {self.config_switches.get('discard_search_errors', False)}")
+        print(f"  5.4.3 Step limit handling: {self.config_switches.get('enable_step_limit_handling', False)}")
+        print(f"  5.4.4 Token budget handling: {self.config_switches.get('enable_token_budget_handling', False)}")
 
     def init_workers(self):
         super().init_workers()
@@ -426,9 +435,26 @@ class AgentPPOTrainer(RayPPOTrainer):
 
                     # implement critic warmup
                     if self.config.trainer.critic_warmup <= self.global_steps:
+                        # 5.4.4 Exceeding the token budget: compute advantage, exclude from updates
+                        # 检测被截断的样本（response 最后一个 token 的 attention_mask 为 0）
+                        # 如果开启 token budget handling，则在 actor update 前过滤掉这些样本
+                        enable_token_budget_handling = self.config_switches.get("enable_token_budget_handling", False)
+
+                        actor_batch = batch
+                        if enable_token_budget_handling:
+                            # 检测被截断的样本：response 最后一个位置的 attention_mask 为 0
+                            # 或者使用 response_mask 检测是否达到 max_response_length
+                            truncated_mask = batch.batch["attention_mask"][:, -1] == 0
+                            truncated_count = truncated_mask.sum().item()
+
+                            if truncated_count > 0:
+                                metrics["batch/truncated_samples"] = truncated_count
+                                # 过滤掉被截断的样本，不参与 actor update
+                                actor_batch = batch[~truncated_mask]
+
                         # update actor
                         with marked_timer("update_actor", timing_raw):
-                            actor_output = self.actor_rollout_wg.update_actor(batch)
+                            actor_output = self.actor_rollout_wg.update_actor(actor_batch)
                         actor_output_metrics = reduce_metrics(actor_output.meta_info["metrics"])
                         metrics.update(actor_output_metrics)
 
@@ -554,8 +580,8 @@ class AgentPPOTrainer(RayPPOTrainer):
             meta_info (optional): Metadata for veRL generation.
 
         Returns:
-            DataProto: Representation of the agent's trajectories.
-            Dict[str:float]: Metrics for the generation process.
+            tuple: (DataProto, metrics, valid_indices) - DataProto representation of trajectories,
+                   metrics for the generation process, and indices of valid trajectories (5.4.2).
         """
         if timing_raw is None:
             timing_raw = {}
@@ -572,8 +598,8 @@ class AgentPPOTrainer(RayPPOTrainer):
 
         with marked_timer("transform_trajectory", timing_raw):
             # Transform the raw trajectories into DataProto format.
-            final_gen_batch_output, metrics = self._transform_agent_trajectories(trajectories)
-        return final_gen_batch_output, metrics
+            final_gen_batch_output, metrics, valid_indices = self._transform_agent_trajectories(trajectories)
+        return final_gen_batch_output, metrics, valid_indices
 
     def generate_agent_steps(self, timing_raw=None, meta_info=None, uids=None):
         """
@@ -603,14 +629,52 @@ class AgentPPOTrainer(RayPPOTrainer):
     def _transform_agent_trajectories(self, trajectories: list[dict]):
         """
         Helper function to transform a list of trajectories into tokenized DataProto format.
+        5.4.2 Search errors: discard directly
+        5.4.3 Exceeding the search step limit: stop + 0 reward
 
         Args:
             trajectories (list of dict): List of trajectories to process.
 
         Returns:
-            DataProto: A structured dataset containing input tokens, masks, and rewards.
+            tuple: (DataProto, metrics) - DataProto containing input tokens, masks, and rewards,
+                  and metrics including counts of discarded/affected trajectories.
         """
         from verl.utils.torch_functional import pad_sequence_to_length
+
+        # 5.4.2 和 5.4.3: 获取配置开关
+        discard_search_errors = self.config_switches.get("discard_search_errors", False)
+        enable_step_limit_handling = self.config_switches.get("enable_step_limit_handling", False)
+
+        # 过滤轨迹并统计
+        filtered_trajectories = []
+        valid_indices = []  # 记录保留的轨迹索引
+        search_error_count = 0  # 5.4.2: 统计 search errors 数量
+        max_steps_exceeded_count = 0  # 5.4.3: 统计超过 max_steps 的数量
+
+        for idx, traj in enumerate(trajectories):
+            traj_metrics = traj.get("metrics", {})
+            terminated_reason = traj_metrics.get("terminated_reason", "")
+
+            # 5.4.2 Search errors: discard directly (完全丢弃)
+            # 检测: ENV_TIMEOUT, ENV_ERROR 等环境错误
+            has_search_error = terminated_reason in ["ENV_TIMEOUT", "ENV_ERROR"]
+
+            if has_search_error and discard_search_errors:
+                search_error_count += 1
+                continue  # 完全丢弃此轨迹
+
+            # 5.4.3 Exceeding the search step limit: stop + 0 reward
+            # 检测: MAX_STEPS
+            is_max_steps_exceeded = terminated_reason == "MAX_STEPS"
+
+            if is_max_steps_exceeded and enable_step_limit_handling:
+                max_steps_exceeded_count += 1
+                # 保留此轨迹，但 reward 已经在 engine 中设置为 0
+
+            filtered_trajectories.append(traj)
+            valid_indices.append(idx)
+
+        trajectories = filtered_trajectories
 
         all_initial_tokens_list = []
         all_response_tokens_list = []
@@ -619,6 +683,12 @@ class AgentPPOTrainer(RayPPOTrainer):
         chat_completions = []
         traj_metrics = []
         metrics = {}
+
+        # 5.4.2: 记录丢弃的 search errors 数量
+        if search_error_count > 0:
+            metrics["batch/search_errors_discarded"] = search_error_count
+        if max_steps_exceeded_count > 0:
+            metrics["batch/max_steps_exceeded"] = max_steps_exceeded_count
 
         for traj in trajectories:
             prompt_tokens = traj["prompt_tokens"]
@@ -718,7 +788,7 @@ class AgentPPOTrainer(RayPPOTrainer):
 
         self.visualize_trajectory(DataProto.from_dict(tensors=tensor_batch))
 
-        return DataProto.from_dict(tensors=tensor_batch), metrics
+        return DataProto.from_dict(tensors=tensor_batch), metrics, valid_indices
 
     def visualize_trajectory(self, tensor_batch, sample_idx=0, max_samples=1, mask_key="response_mask"):
         """

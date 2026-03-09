@@ -29,6 +29,10 @@ class ToolAgent(BaseAgent):
         tool_map: dict[str, type[Tool]] | None = None,
         log_dir: str | None = None,
         enable_logging: bool = False,
+        # 5.4.1 Outlier Suppression: Break + 0 reward
+        enable_outlier_suppression: bool = False,
+        max_tool_calls_per_step: int = 10,
+        check_duplicate_queries: bool = False,
     ):
         """
         Initialize the ToolAgent.
@@ -40,6 +44,9 @@ class ToolAgent(BaseAgent):
             tool_map: Dictionary mapping tool names to Tool classes (new behavior).
             log_dir: Directory to save trajectory logs.
             enable_logging: Whether to enable trajectory logging.
+            enable_outlier_suppression: Whether to enable 5.4.1 outlier suppression (break + 0 reward).
+            max_tool_calls_per_step: Maximum number of tool calls per step before breaking (for 5.4.1).
+            check_duplicate_queries: Whether to check for duplicate queries (for 5.4.1).
         """
         if tool_map is not None and tools is not None:
             raise ValueError("Cannot specify both 'tools' and 'tool_map' parameters")
@@ -48,7 +55,12 @@ class ToolAgent(BaseAgent):
         self.log_dir = log_dir
         self.enable_logging = enable_logging
 
-        # Initialize MultiTool with either tools or tool_map
+        # 5.4.1 Outlier Suppression: Break + 0 reward 配置
+        self.enable_outlier_suppression = enable_outlier_suppression
+        self.max_tool_calls_per_step = max_tool_calls_per_step
+        self.check_duplicate_queries = check_duplicate_queries
+
+        # 初始化 MultiTool with either tools or tool_map
         if tool_map is not None:
             self.tools = MultiTool(tool_map=tool_map)
         elif tools is not None:
@@ -70,6 +82,9 @@ class ToolAgent(BaseAgent):
         self.current_uid: str | None = None
         self.step_count: int = 0
         self.log_data: dict = {}
+
+        # 5.4.1 Outlier Suppression: 用于检测重复查询的历史记录
+        self.previous_queries: list[str] = []
 
         self.reset()  # Call reset to set initial state
 
@@ -142,9 +157,16 @@ class ToolAgent(BaseAgent):
         """
         Updates the agent's state based on the model's response.
         Parses the response, updates messages, and the current step in the trajectory.
+        
+        5.4.1 Outlier Suppression: Break + 0 reward
+        - 检测工具解析错误
+        - 检测单步工具调用数量超限
+        - 检测重复查询
         """
         tool_calls_dict = []
         assistant_content = response
+        has_parse_error = False
+        
         # Attempt to parse tool calls from string response
         try:
             tool_calls = self.tool_parser.parse(response)
@@ -159,7 +181,59 @@ class ToolAgent(BaseAgent):
 
         except Exception as e:
             logger.error(f"Failed to parse tool calls from string response: {e}")
+            has_parse_error = True
             tool_calls_dict = []  # Indicate no valid tool calls parsed
+
+        # 5.4.1 Outlier Suppression: 检查是否触发异常条件
+        should_break = False
+        abnormal_reason = None
+
+        if self.enable_outlier_suppression:
+            # 1. 检测工具解析错误
+            if has_parse_error:
+                should_break = True
+                abnormal_reason = "tool_parse_error"
+                logger.warning(f"Tool parse error detected, breaking trajectory with 0 reward")
+
+            # 2. 检测单步工具调用数量超限
+            elif len(tool_calls_dict) > self.max_tool_calls_per_step:
+                should_break = True
+                abnormal_reason = f"too_many_tool_calls ({len(tool_calls_dict)} > {self.max_tool_calls_per_step})"
+                logger.warning(f"Too many tool calls detected ({len(tool_calls_dict)}), breaking trajectory with 0 reward")
+
+            # 3. 检测重复查询（仅针对 search 工具）
+            elif self.check_duplicate_queries:
+                for call in tool_calls_dict:
+                    func_name = call.get("function", {}).get("name", "")
+                    if func_name == "search":
+                        func_args = call.get("function", {}).get("arguments", "")
+                        if isinstance(func_args, dict):
+                            query = func_args.get("query", "")
+                        else:
+                            # 尝试从 JSON 字符串解析
+                            try:
+                                args_dict = json.loads(func_args) if isinstance(func_args, str) else {}
+                                query = args_dict.get("query", "")
+                            except:
+                                query = ""
+
+                        # 检查是否与之前的查询重复
+                        if query and query in self.previous_queries:
+                            should_break = True
+                            abnormal_reason = f"duplicate_query: {query}"
+                            logger.warning(f"Duplicate query detected: {query}, breaking trajectory with 0 reward")
+                            break
+                        # 记录当前查询
+                        if query:
+                            self.previous_queries.append(query)
+
+        # 如果触发异常条件，标记当前 step
+        if should_break:
+            # 记录异常信息到 step 的 info 中
+            if self._trajectory.steps:
+                self._trajectory.steps[-1].info = self._trajectory.steps[-1].info or {}
+                self._trajectory.steps[-1].info["abnormal_reason"] = abnormal_reason
+                self._trajectory.steps[-1].info["should_break"] = True
 
         # Log step information
         self._save_step_log(
@@ -282,6 +356,8 @@ class ToolAgent(BaseAgent):
 
         self.step_count = 0
         self.log_data = {}
+        # 5.4.1 Outlier Suppression: 重置重复查询历史
+        self.previous_queries = []
 
     @property
     def chat_completions(self) -> list[dict[str, str]]:

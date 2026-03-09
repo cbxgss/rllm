@@ -43,6 +43,27 @@ def main(config):
         "parser_name": "qwen",
         "log_dir": log_dir,
         "enable_logging": True,
+        # 5.4.1 Outlier Suppression: Break + 0 reward
+        # 触发条件: 工具解析错误、单步工具调用数量超限、重复查询
+        # 处理: 立即停止轨迹并给予 0 reward
+        "enable_outlier_suppression": True,
+        "max_tool_calls_per_step": 10,
+        "check_duplicate_queries": True,
+        # 其他配置开关存储在 _config_switches 中供 trainer 使用
+        "_config_switches": {
+            # 5.4.2 Search errors: discard directly
+            # 触发条件: 环境错误（超时、连接失败等）
+            # 处理: 完全丢弃轨迹，仅记录统计信息
+            "discard_search_errors": True,
+            # 5.4.3 Exceeding the search step limit: stop + 0 reward
+            # 触发条件: 达到 max_steps
+            # 处理: 停止 rollout 并给予 0 reward
+            "enable_step_limit_handling": True,
+            # 5.4.4 Exceeding the token budget: compute advantage, exclude from updates
+            # 触发条件: 达到 max_response_length
+            # 处理: 仍用于计算优势，但不参与损失计算和反向传播
+            "enable_token_budget_handling": True,
+        }
     }
 
     # Use the registry-based approach (comment out the other approach)

@@ -278,6 +278,16 @@ class AgentExecutionEngine:
             cur_step.done = done
             cur_step.info.update(info)
 
+            # 5.4.1 Outlier Suppression: 检查是否应该提前终止轨迹
+            if cur_step.info.get("should_break", False):
+                termination_reason = cur_step.info.get("abnormal_reason", "ABNORMAL_DETECTED")
+                reward = 0  # 异常轨迹给予 0 reward
+                cur_step.reward = reward
+                done = True
+                cur_step.done = done
+                colorful_print(f"Trajectory {idx} terminated due to: {termination_reason}. Reward set to 0.\n", "yellow")
+                break
+
             chat_completions_messages = agent.chat_completions
             assistant_message, env_messages = get_recent_assistant_user_messages(chat_completions_messages)
 
