@@ -452,6 +452,8 @@ class AgentPPOTrainer(RayPPOTrainer):
                                 metrics["batch/truncated_samples"] = truncated_count
                                 # 过滤掉被截断的样本，不参与 actor update
                                 actor_batch = batch[~truncated_mask]
+                                # 过滤后需要 padding 到能被 world_size 整除
+                                actor_batch = self._pad_dataproto_to_world_size(batch=actor_batch)
 
                         # update actor
                         with marked_timer("update_actor", timing_raw):
