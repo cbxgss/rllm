@@ -444,8 +444,10 @@ class AgentPPOTrainer(RayPPOTrainer):
                         actor_batch = batch
                         if enable_token_budget_handling:
                             # 检测被截断的样本：response 最后一个位置的 attention_mask 为 0
-                            # 或者使用 response_mask 检测是否达到 max_response_length
-                            truncated_mask = batch.batch["attention_mask"][:, -1] == 0
+                            # 注意：attention_mask = [prompt_mask, response_mask]
+                            # 需要检测 response 部分的最后一个位置，而不是整个序列的最后一个位置
+                            prompt_length = batch.batch["prompts"].shape[1]
+                            truncated_mask = batch.batch["attention_mask"][:, prompt_length + self.config.data.max_response_length - 1] == 0
                             truncated_count = truncated_mask.sum().item()
 
                             if truncated_count > 0:
