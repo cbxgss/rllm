@@ -818,6 +818,9 @@ class AgentPPOTrainer(RayPPOTrainer):
         traj_metrics = {k: [d[k] for d in traj_metrics] for k in traj_metrics[0]}
         # Aggregate metrics (mean, min, max)
         for k, v_list in traj_metrics.items():
+            # 跳过字符串类型的字段（如 terminated_reason）
+            if v_list and isinstance(v_list[0], str):
+                continue
             v_list = [v for v in v_list if v is not None and v >= 0]
             if not v_list:
                 continue
