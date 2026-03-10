@@ -407,6 +407,8 @@ class AgentExecutionEngine:
                 "metrics": {
                     # Total number of steps taken in the trajectory
                     "steps": len(trajectory.steps),
+                    # Termination reason (if any)
+                    "terminated_reason": termination_reason,
                     # Time to calculate reward
                     "reward_time": reward_time,
                     # Total time spent in environment execution (env.step)

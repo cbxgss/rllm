@@ -192,13 +192,13 @@ class ToolAgent(BaseAgent):
             # 1. 检测工具解析错误
             if has_parse_error:
                 should_break = True
-                abnormal_reason = "tool_parse_error"
+                abnormal_reason = "TOOL_PARSE_ERROR"
                 logger.warning(f"Tool parse error detected, breaking trajectory with 0 reward")
 
             # 2. 检测单步工具调用数量超限
             elif len(tool_calls_dict) > self.max_tool_calls_per_step:
                 should_break = True
-                abnormal_reason = f"too_many_tool_calls ({len(tool_calls_dict)} > {self.max_tool_calls_per_step})"
+                abnormal_reason = "BURST_TOOL_CALL"
                 logger.warning(f"Too many tool calls detected ({len(tool_calls_dict)}), breaking trajectory with 0 reward")
 
             # 3. 检测重复查询（仅针对 search 工具）
@@ -220,7 +220,7 @@ class ToolAgent(BaseAgent):
                         # 检查是否与之前的查询重复
                         if query and query in self.previous_queries:
                             should_break = True
-                            abnormal_reason = f"duplicate_query: {query}"
+                            abnormal_reason = "REPEATED_QUERY"
                             logger.warning(f"Duplicate query detected: {query}, breaking trajectory with 0 reward")
                             break
                         # 记录当前查询

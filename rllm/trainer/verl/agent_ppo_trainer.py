@@ -449,9 +449,11 @@ class AgentPPOTrainer(RayPPOTrainer):
                             max_response_length = response_mask.shape[1]
                             truncated_mask = response_mask[:, -1] == 1
                             truncated_count = truncated_mask.sum().item()
+                            total_count = response_mask.shape[0]
 
                             if truncated_count > 0:
                                 metrics["batch/truncated_samples"] = truncated_count
+                                metrics["batch/truncated_rate"] = truncated_count / total_count if total_count > 0 else 0
                                 # 过滤掉被截断的样本，不参与 actor update
                                 actor_batch = batch[~truncated_mask]
                                 # 过滤后需要 padding 到能被 world_size 整除
@@ -689,11 +691,116 @@ class AgentPPOTrainer(RayPPOTrainer):
         traj_metrics = []
         metrics = {}
 
-        # 5.4.2: 记录丢弃的 search errors 数量
+        # 7.1 搜索相关指标
+        search_steps_list = []  # 每条轨迹的搜索步数（assistant消息数）
+        tool_calls_list = []  # 每条轨迹的工具调用总数
+        max_tool_calls_per_step_list = []  # 每条轨迹单步最大工具调用数
+
+        # 7.2 异常样本指标统计
+        repeated_query_count = 0  # 重复查询
+        tool_parse_error_count = 0  # 工具解析错误
+        burst_tool_call_count = 0  # 单步爆发式工具调用
+        cjk_char_count = 0  # 中文字符
+
+        for traj in trajectories:
+            prompt_tokens = traj["prompt_tokens"]
+            response_tokens = traj["response_tokens"]
+            # test if trajectory is empty
+            assert prompt_tokens.numel() != 0 and response_tokens.numel() != 0, f"Both prompt {prompt_tokens.numel()} and response {response_tokens.numel()} of trajectory shouldn't be empty. Please check make sure environment is working and the config"
+            all_initial_tokens_list.append(prompt_tokens)
+            all_response_tokens_list.append(response_tokens)
+            all_masks_list.append(traj["response_masks"])
+            traj_scores.append(traj["trajectory_reward"])
+            chat_completions.append(traj["chat_completions"])
+            traj_metrics.append(traj["metrics"])
+
+            # 7.1 搜索相关指标统计
+            search_steps = 0
+            total_tool_calls = 0
+            max_tool_calls_per_step = 0
+            response_text = ""
+
+            for completion in traj["chat_completions"]:
+                if completion.get("role") == "assistant":
+                    search_steps += 1
+                    content = completion.get("content", "")
+                    if isinstance(content, str):
+                        response_text += content
+                    # 统计工具调用次数
+                    tool_calls = completion.get("tool_calls", [])
+                    if tool_calls:
+                        num_tool_calls = len(tool_calls)
+                        total_tool_calls += num_tool_calls
+                        max_tool_calls_per_step = max(max_tool_calls_per_step, num_tool_calls)
+
+            search_steps_list.append(search_steps)
+            tool_calls_list.append(total_tool_calls)
+            max_tool_calls_per_step_list.append(max_tool_calls_per_step)
+
+            # 7.2 统计异常类型
+            traj_meta = traj.get("metrics", {})
+            terminated_reason = traj_meta.get("terminated_reason", "")
+            if terminated_reason == "REPEATED_QUERY":
+                repeated_query_count += 1
+            elif terminated_reason == "TOOL_PARSE_ERROR":
+                tool_parse_error_count += 1
+            elif terminated_reason == "BURST_TOOL_CALL":
+                burst_tool_call_count += 1
+
+            # 检测中文字符（CJK字符）
+            cjk_chars = len([c for c in response_text if '\u4e00' <= c <= '\u9fff'])
+            if cjk_chars > 0:
+                cjk_char_count += 1
+
+        # 7.1 搜索相关指标
+        batch_size = len(trajectories)
+        if search_steps_list:
+            search_steps_arr = np.array(search_steps_list)
+            tool_calls_arr = np.array(tool_calls_list)
+            max_tool_calls_per_step_arr = np.array(max_tool_calls_per_step_list)
+
+            # 所有轨迹的平均搜索步数和工具调用数
+            metrics["traj/search_steps_mean"] = float(search_steps_arr.mean())
+            metrics["traj/search_steps_median"] = float(np.median(search_steps_arr))
+            metrics["traj/search_steps_max"] = int(search_steps_arr.max())
+            metrics["traj/tool_calls_mean"] = float(tool_calls_arr.mean())
+            metrics["traj/tool_calls_median"] = float(np.median(tool_calls_arr))
+            metrics["traj/tool_calls_max"] = int(tool_calls_arr.max())
+            metrics["traj/max_tool_calls_per_step_mean"] = float(max_tool_calls_per_step_arr.mean())
+            metrics["traj/max_tool_calls_per_step_median"] = float(np.median(max_tool_calls_per_step_arr))
+            metrics["traj/max_tool_calls_per_step_max"] = int(max_tool_calls_per_step_arr.max())
+
+            # 正确轨迹的指标（reward > 0）
+            correct_indices = [i for i, score in enumerate(traj_scores) if score > 0]
+            if correct_indices:
+                correct_search_steps_arr = search_steps_arr[correct_indices]
+                correct_tool_calls_arr = tool_calls_arr[correct_indices]
+                metrics["traj/correct_search_steps_mean"] = float(correct_search_steps_arr.mean())
+                metrics["traj/correct_search_steps_median"] = float(np.median(correct_search_steps_arr))
+                metrics["traj/correct_search_steps_max"] = int(correct_search_steps_arr.max())
+                metrics["traj/correct_tool_calls_mean"] = float(correct_tool_calls_arr.mean())
+                metrics["traj/correct_tool_calls_median"] = float(np.median(correct_tool_calls_arr))
+                metrics["traj/correct_tool_calls_max"] = int(correct_tool_calls_arr.max())
+
+        # 5.4.2 和 5.4.3: 记录异常样本的比例
+        total_trajectories = len(trajectories) + search_error_count  # 包括被丢弃的
         if search_error_count > 0:
             metrics["batch/search_errors_discarded"] = search_error_count
+            metrics["batch/search_errors_rate"] = search_error_count / total_trajectories if total_trajectories > 0 else 0
         if max_steps_exceeded_count > 0:
             metrics["batch/max_steps_exceeded"] = max_steps_exceeded_count
+            metrics["batch/max_steps_rate"] = max_steps_exceeded_count / total_trajectories if total_trajectories > 0 else 0
+
+        # 7.2 异常样本指标
+        batch_size = len(trajectories)
+        metrics["batch/repeated_query_rate"] = repeated_query_count / batch_size if batch_size > 0 else 0
+        metrics["batch/tool_parse_error_rate"] = tool_parse_error_count / batch_size if batch_size > 0 else 0
+        metrics["batch/burst_tool_call_rate"] = burst_tool_call_count / batch_size if batch_size > 0 else 0
+        metrics["batch/cjk_char_rate"] = cjk_char_count / batch_size if batch_size > 0 else 0
+        metrics["batch/repeated_query_count"] = repeated_query_count
+        metrics["batch/tool_parse_error_count"] = tool_parse_error_count
+        metrics["batch/burst_tool_call_count"] = burst_tool_call_count
+        metrics["batch/cjk_char_count"] = cjk_char_count
 
         for traj in trajectories:
             prompt_tokens = traj["prompt_tokens"]
